@@ -47,7 +47,7 @@ class CategorySeeder extends Seeder
             [
                 'name' => 'Soft Drink', 
                 'sort_order' => 6,
-                'image_url' => 'https://res.cloudinary.com/ddtls0ctx/image/upload/v1772721934/laoreat/categories/soft-drink_oqzy62.jpg',
+                'image_url' => 'https://res.cloudinary.com/ddtls0ctx/image/upload/v1772797180/laoreat/categories/soft-drink_oqzy62.jpg',
                 'image_public_id' => 'laoreat/categories/soft-drink_oqzy62',
             ],
         ]; 

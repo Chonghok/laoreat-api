@@ -21,6 +21,9 @@ Route::middleware('auth:admin')->group(function () {
 
     // Categories routes
     Route::get('/categories', [CategoryController::class, 'index']);
+    Route::post('/categories', [CategoryController::class, 'store']);
+    Route::post('/categories/{id}', [CategoryController::class, 'update']);
+    Route::patch('/categories/{id}/status', [CategoryController::class, 'setStatus']);
 
     // Products routes
     Route::get('/products', [ProductController::class, 'index']);
