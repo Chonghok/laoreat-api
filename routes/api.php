@@ -10,6 +10,11 @@ Route::get('/health', fn() => response()->json(['ok' => true]));
 
 Route::post('/admin/login', [AdminAuthController::class, 'login']);
 
+Route::get('/version', fn () => response()->json([
+    'ok' => true,
+    'version' => 'b285f20'
+]));
+
 Route::middleware('auth:admin')->group(function () {
     Route::get('/admin/me', [AdminAuthController::class, 'me']);
     Route::post('/admin/logout', [AdminAuthController::class, 'logout']);
