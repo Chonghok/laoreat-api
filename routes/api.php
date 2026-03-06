@@ -6,6 +6,8 @@ use App\Http\Controllers\AdminAuthController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\CategoryController;
 
+Route::get('/health', fn() => response()->json(['ok' => true]));
+
 Route::post('/admin/login', [AdminAuthController::class, 'login']);
 
 Route::middleware('auth:admin')->group(function () {
