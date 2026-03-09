@@ -11,18 +11,17 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('admins', function (Blueprint $table) {
+        Schema::create('customers', function (Blueprint $table) {
             $table->id();
             $table->string('username', 100);
-            $table->string('email', 255);
+            $table->string('email', 255)->unique();
             $table->string('password', 255);
-            $table->string('role', 50);
+            $table->string('phone_number', 30)->unique();
+            $table->timestamp('phone_verified_at')->nullable();
             $table->text('profile_url')->nullable();
             $table->string('profile_public_id', 255)->nullable();
             $table->boolean('is_active')->default(true);
             $table->timestamps();
-
-            $table->unique('email');
         });
     }
 
@@ -31,6 +30,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('admins');
+        Schema::dropIfExists('customers');
     }
 };
