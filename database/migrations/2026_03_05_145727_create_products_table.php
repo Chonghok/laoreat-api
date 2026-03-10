@@ -21,7 +21,7 @@ return new class extends Migration
             
             $table->string('name', 255);
             $table->decimal('price', 10, 2)->default(0.00);
-            $table->string('unit_label', 100)->nullable();
+            $table->string('unit_label', 100);
             $table->text('image_url');
             $table->string('image_public_id', 255);
             $table->text('description');

@@ -6,7 +6,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Notifications\Notifiable;
 
-class Admin extends Authenticatable
+class Customer extends Authenticatable
 {
     use HasApiTokens, Notifiable;
 
@@ -14,13 +14,19 @@ class Admin extends Authenticatable
         'username',
         'email',
         'password',
-        'role',
-        'is_active',
+        'phone_number',
+        'phone_verified_at',
         'profile_url',
         'profile_public_id',
+        'is_active',
     ];
 
     protected $hidden = [
         'password',
+    ];
+
+    protected $casts = [
+        'phone_verified_at' => 'datetime',
+        'is_active' => 'boolean',
     ];
 }

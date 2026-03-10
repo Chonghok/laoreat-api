@@ -5,16 +5,20 @@ use App\Http\Controllers\AdminController;
 use App\Http\Controllers\AdminAuthController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\CategoryController;
+use App\Http\Controllers\CustomerAuthController;
 
 Route::get('/health', fn() => response()->json(['ok' => true]));
 
+// Admin public routes
 Route::post('/admin/login', [AdminAuthController::class, 'login']);
 
-Route::get('/version', fn () => response()->json([
-    'ok' => true,
-    'version' => 'b285f20'
-]));
+// Customer public routes
+Route::post('/customer/register', [CustomerAuthController::class, 'register']);
+Route::post('/customer/login', [CustomerAuthController::class, 'login']);
+Route::post('/customer/phone-otp/send', [CustomerAuthController::class, 'sendPhoneOtp']);
+Route::post('/customer/phone-otp/verify', [CustomerAuthController::class, 'verifyPhoneOtp']);
 
+// Admin protected routes
 Route::middleware('auth:admin')->group(function () {
     Route::get('/admin/me', [AdminAuthController::class, 'me']);
     Route::post('/admin/logout', [AdminAuthController::class, 'logout']);
@@ -34,9 +38,14 @@ Route::middleware('auth:admin')->group(function () {
     Route::get('/products', [ProductController::class, 'index']);
     Route::post('/products', [ProductController::class, 'store']);
     Route::post('/products/{id}', [ProductController::class, 'update']);
-
     Route::patch('/products/{id}/status', [ProductController::class, 'setStatus']);
     Route::patch('/products/{id}/availability', [ProductController::class, 'setAvailability']);
+});
+
+// Customer protected routes
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/customer/me', [CustomerAuthController::class, 'me']);
+    Route::post('/customer/logout', [CustomerAuthController::class, 'logout']);
 });
 
 
