@@ -9,27 +9,80 @@ use Illuminate\Support\Facades\Hash;
 
 class CustomerAuthController extends Controller
 {
+    private function formatKhPhoneNumber(string $phone): string
+    {
+        // remove everything except digits and +
+        $phone = preg_replace('/[^\d+]/', '', trim($phone));
+
+        // remove +855 or 855 if already included
+        if (str_starts_with($phone, '+855')) {
+            $phone = substr($phone, 4);
+        } elseif (str_starts_with($phone, '855')) {
+            $phone = substr($phone, 3);
+        }
+
+        // remove leading 0
+        if (str_starts_with($phone, '0')) {
+            $phone = substr($phone, 1);
+        }
+
+        // apply Cambodia spacing
+        $formattedLocal = $this->formatKhLocalNumber($phone);
+
+        return '+855 ' . $formattedLocal;
+    }
+
+    private function formatKhLocalNumber(string $digits): string
+    {
+        $len = strlen($digits);
+
+        // 8 digits => 12 345 678
+        if ($len === 8) {
+            return substr($digits, 0, 2) . ' ' .
+                   substr($digits, 2, 3) . ' ' .
+                   substr($digits, 5, 3);
+        }
+
+        // 9 digits => 97 234 5678
+        if ($len === 9) {
+            return substr($digits, 0, 2) . ' ' .
+                   substr($digits, 2, 3) . ' ' .
+                   substr($digits, 5, 4);
+        }
+
+        // fallback if unexpected length
+        return $digits;
+    }
+
     public function register(Request $request)
     {
         $request->validate([
             'username'     => 'required|string|max:100',
             'email'        => 'required|email|max:255|unique:customers,email',
             'password'     => 'required|string|min:4|confirmed',
-            'phone_number' => 'required|string|max:30|unique:customers,phone_number',
+            'phone_number' => 'required|string|max:30',
         ]);
+
+        $formattedPhone = $this->formatKhPhoneNumber($request->phone_number);
+
+        if (Customer::where('phone_number', $formattedPhone)->exists()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This phone number is already registered.'
+            ], 422);
+        }
 
         $customer = Customer::create([
             'username'          => $request->username,
             'email'             => $request->email,
             'password'          => Hash::make($request->password),
-            'phone_number'      => $request->phone_number,
+            'phone_number'      => $formattedPhone,
             'phone_verified_at' => null,
-            'profile_url'       => env('DEFAULT_PROFILE_URL'),
+            'profile_url'       => null,
             'profile_public_id' => null,
             'is_active'         => true,
         ]);
 
-        // delete old unused phone verification OTPs for this customer
         CustomerOtp::where('customer_id', $customer->id)
             ->where('type', 'phone_verification')
             ->whereNull('verified_at')
@@ -55,6 +108,7 @@ class CustomerAuthController extends Controller
                 'username'     => $customer->username,
                 'email'        => $customer->email,
                 'phone_number' => $customer->phone_number,
+                'profile_url'  => $customer->profile_url ?: env('DEFAULT_PROFILE_URL'),
             ],
             'demo_otp' => $code,
         ], 201);
@@ -87,7 +141,11 @@ class CustomerAuthController extends Controller
         if (is_null($customer->phone_verified_at)) {
             return response()->json([
                 'success' => false,
-                'message' => 'Please verify your phone number first.'
+                'message' => 'Please verify your phone number first.',
+                'customer' => [
+                    'email' => $customer->email,
+                    'phone_number' => $customer->phone_number,
+                ]
             ], 403);
         }
 
@@ -103,7 +161,7 @@ class CustomerAuthController extends Controller
                 'email'             => $customer->email,
                 'phone_number'      => $customer->phone_number,
                 'phone_verified_at' => $customer->phone_verified_at,
-                'profile_url'       => $customer->profile_url,
+                'profile_url'       => $customer->profile_url ?: env('DEFAULT_PROFILE_URL'),
                 'is_active'         => (int) $customer->is_active,
             ],
         ]);
@@ -115,7 +173,18 @@ class CustomerAuthController extends Controller
 
         return response()->json([
             'success'  => true,
-            'customer' => $customer,
+            'customer' => [
+                'id'                => $customer->id,
+                'username'          => $customer->username,
+                'email'             => $customer->email,
+                'phone_number'      => $customer->phone_number,
+                'phone_verified_at' => $customer->phone_verified_at,
+                'profile_url'       => $customer->profile_url ?: env('DEFAULT_PROFILE_URL'),
+                'profile_public_id' => $customer->profile_public_id,
+                'is_active'         => (int) $customer->is_active,
+                'created_at'        => $customer->created_at,
+                'updated_at'        => $customer->updated_at,
+            ],
         ]);
     }
 
@@ -161,7 +230,7 @@ class CustomerAuthController extends Controller
             'phone_number' => $customer->phone_number,
             'code'         => $code,
             'type'         => 'phone_verification',
-            'expires_at'   => now()->addMinutes(2),
+            'expires_at'   => now()->addMinutes(5),
             'verified_at'  => null,
         ]);
 
@@ -214,6 +283,32 @@ class CustomerAuthController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Phone number verified successfully.'
+        ]);
+    }
+
+    public function checkRegisterAvailability(Request $request)
+    {
+        $request->validate([
+            'email'        => 'required|email|max:255',
+            'phone_number' => 'nullable|string|max:30',
+        ]);
+
+        $emailExists = Customer::where('email', $request->email)->exists();
+
+        $phoneExists = false;
+
+        if ($request->filled('phone_number')) {
+            $formattedPhone = $this->formatKhPhoneNumber($request->phone_number);
+            $phoneExists = Customer::where('phone_number', $formattedPhone)->exists();
+        }
+
+        return response()->json([
+            'success' => true,
+            'available' => !$emailExists && !$phoneExists,
+            'errors' => [
+                'email' => $emailExists ? 'This email is already registered.' : null,
+                'phone_number' => $phoneExists ? 'This phone number is already registered.' : null,
+            ]
         ]);
     }
 }

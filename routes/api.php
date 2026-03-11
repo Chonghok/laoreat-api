@@ -17,6 +17,14 @@ Route::post('/customer/register', [CustomerAuthController::class, 'register']);
 Route::post('/customer/login', [CustomerAuthController::class, 'login']);
 Route::post('/customer/phone-otp/send', [CustomerAuthController::class, 'sendPhoneOtp']);
 Route::post('/customer/phone-otp/verify', [CustomerAuthController::class, 'verifyPhoneOtp']);
+Route::post('/customer/check-register-availability', [CustomerAuthController::class, 'checkRegisterAvailability']);
+
+// App public fetch routes
+Route::get('/app/categories', [CategoryController::class, 'appIndex']);
+Route::get('/app/products', [ProductController::class, 'appIndex']);
+Route::get('/app/products/deals', [ProductController::class, 'deals']);
+// Route::get('/app/products/popular', [ProductController::class, 'popular']);
+Route::get('/app/products/{id}', [ProductController::class, 'show']);
 
 // Admin protected routes
 Route::middleware('auth:admin')->group(function () {

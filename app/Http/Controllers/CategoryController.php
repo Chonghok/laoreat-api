@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use App\Models\Category;
 use CloudinaryLabs\CloudinaryLaravel\Facades\Cloudinary;
 
 class CategoryController extends Controller
@@ -193,6 +194,21 @@ class CategoryController extends Controller
             'message' => ((int)$request->is_active === 1)
                 ? 'Category enabled successfully.'
                 : 'Category disabled successfully.'
+        ]);
+    }
+
+    public function appIndex()
+    {
+        $categories = Category::query()
+            ->select('id', 'name', 'image_url', 'sort_order')
+            ->where('is_active', 1)
+            ->orderBy('sort_order')
+            ->orderBy('id')
+            ->get();
+        
+        return response()->json([
+            'success' => true,
+            'date' => $categories,
         ]);
     }
 }

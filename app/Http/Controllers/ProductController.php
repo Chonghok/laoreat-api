@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use App\Models\Product;
 use CloudinaryLabs\CloudinaryLaravel\Facades\Cloudinary;
 
 class ProductController extends Controller
@@ -208,7 +209,6 @@ class ProductController extends Controller
 
     public function setAvailability(Request $request, $id)
     {
-        // ✅ operator is allowed here
         $product = DB::table('products')->where('id', $id)->first();
         if (!$product) {
             return response()->json(['success' => false, 'message' => 'Product not found'], 404);
@@ -224,6 +224,146 @@ class ProductController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Availability updated'
+        ]);
+    }
+
+    public function appIndex(Request $request)
+    {
+        $query = DB::table('products as p')
+            ->leftJoin('categories as c', 'c.id', '=', 'p.category_id')
+            ->select(
+                'p.id',
+                'p.category_id',
+                'p.name',
+                'p.price',
+                'p.unit_label',
+                'p.image_url',
+                'p.description',
+                'p.is_available',
+                'p.discount_active',
+                'p.discount_percent',
+                'c.name as category_name'
+            )
+            ->where('p.is_active', 1);
+
+        if ($request->filled('category_id')) {
+            $query->where('p.category_id', (int) $request->category_id);
+        }
+
+        if ($request->filled('search')) {
+            $search = trim($request->search);
+            $query->where('p.name', 'like', '%' . $search . '%');
+        }
+
+        $products = $query
+            ->orderBy('p.id', 'asc')
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => $products,
+        ]);
+    }
+
+    public function show($id)
+    {
+        $product = DB::table('products as p')
+            ->leftJoin('categories as c', 'c.id', '=', 'p.category_id')
+            ->select(
+                'p.id',
+                'p.category_id',
+                'p.name',
+                'p.price',
+                'p.unit_label',
+                'p.image_url',
+                'p.image_public_id',
+                'p.description',
+                'p.is_available',
+                'p.discount_active',
+                'p.discount_percent',
+                'c.name as category_name'
+            )
+            ->where('p.id', $id)
+            ->where('p.is_active', 1)
+            ->first();
+
+        if (!$product) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Product not found.'
+            ], 404);
+        }
+
+        $reviewSummary = DB::table('product_reviews')
+            ->selectRaw('COUNT(*) as review_count, COALESCE(AVG(rating), 0) as average_rating')
+            ->where('product_id', $id)
+            ->where('is_visible', 1)
+            ->first();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'id' => $product->id,
+                'category_id' => $product->category_id,
+                'category_name' => $product->category_name,
+                'name' => $product->name,
+                'price' => $product->price,
+                'unit_label' => $product->unit_label,
+                'image_url' => $product->image_url,
+                'image_public_id' => $product->image_public_id,
+                'description' => $product->description,
+                'is_available' => $product->is_available,
+                'discount_active' => $product->discount_active,
+                'discount_percent' => $product->discount_percent,
+                'review_count' => (int) ($reviewSummary->review_count ?? 0),
+                'average_rating' => round((float) ($reviewSummary->average_rating ?? 0), 1),
+            ],
+        ]);
+    }
+
+    public function popular()
+    {
+        $products = DB::table('products as p')
+            ->join('order_items as oi', 'oi.product_id', '=', 'p.id')
+            ->join('orders as o', 'o.id', '=', 'oi.order_id')
+            ->leftJoin('categories as c', 'c.id', '=', 'p.category_id')
+            ->select(
+                'p.id',
+                'p.category_id',
+                'p.name',
+                'p.price',
+                'p.unit_label',
+                'p.image_url',
+                'p.description',
+                'p.is_available',
+                'p.discount_active',
+                'p.discount_percent',
+                'c.name as category_name',
+                DB::raw('COALESCE(SUM(oi.quantity), 0) as total_sold')
+            )
+            ->where('p.is_active', 1)
+            ->whereIn('o.status', ['completed', 'delivered'])
+            ->groupBy(
+                'p.id',
+                'p.category_id',
+                'p.name',
+                'p.price',
+                'p.unit_label',
+                'p.image_url',
+                'p.description',
+                'p.is_available',
+                'p.discount_active',
+                'p.discount_percent',
+                'c.name'
+            )
+            ->orderByDesc('total_sold')
+            ->orderBy('p.id', 'desc')
+            ->limit(10)
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => $products,
         ]);
     }
 }

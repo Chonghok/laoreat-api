@@ -29,4 +29,19 @@ class Customer extends Authenticatable
         'phone_verified_at' => 'datetime',
         'is_active' => 'boolean',
     ];
+
+    public function favorites()
+    {
+        return $this->hasMany(Favorite::class);
+    }
+
+    public function cart()
+    {
+        return $this->hasOne(Cart::class);
+    }
+
+    public function reviews()
+    {
+        return $this->hasMany(ProductReview::class);
+    }
 }
