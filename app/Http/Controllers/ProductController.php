@@ -321,6 +321,37 @@ class ProductController extends Controller
         ]);
     }
 
+    public function deals()
+    {
+        $products = DB::table('products as p')
+            ->leftJoin('categories as c', 'c.id', '=', 'p.category_id')
+            ->select(
+                'p.id',
+                'p.category_id',
+                'p.name',
+                'p.price',
+                'p.unit_label',
+                'p.image_url',
+                'p.description',
+                'p.is_available',
+                'p.discount_active',
+                'p.discount_percent',
+                'c.name as category_name'
+            )
+            ->where('p.is_active', 1)
+            ->where('p.discount_active', 1)
+            ->whereNotNull('p.discount_percent')
+            ->where('p.discount_percent', '>', 0)
+            ->orderByDesc('p.discount_percent')
+            ->orderBy('p.id', 'desc')
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => $products,
+        ]);
+    }
+
     public function popular()
     {
         $products = DB::table('products as p')

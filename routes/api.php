@@ -18,6 +18,9 @@ Route::post('/customer/login', [CustomerAuthController::class, 'login']);
 Route::post('/customer/phone-otp/send', [CustomerAuthController::class, 'sendPhoneOtp']);
 Route::post('/customer/phone-otp/verify', [CustomerAuthController::class, 'verifyPhoneOtp']);
 Route::post('/customer/check-register-availability', [CustomerAuthController::class, 'checkRegisterAvailability']);
+Route::post('/customer/password-reset/send-otp', [CustomerAuthController::class, 'sendResetPasswordOtp']);
+Route::post('/customer/password-reset/verify-otp', [CustomerAuthController::class, 'verifyResetPasswordOtp']);
+Route::post('/customer/password-reset/reset', [CustomerAuthController::class, 'resetPassword']);
 
 // App public fetch routes
 Route::get('/app/categories', [CategoryController::class, 'appIndex']);

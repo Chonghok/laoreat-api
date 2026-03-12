@@ -311,4 +311,127 @@ class CustomerAuthController extends Controller
             ]
         ]);
     }
+
+    public function sendResetPasswordOtp(Request $request)
+    {
+        $request->validate([
+            'email' => 'required|email|exists:customers,email',
+        ]);
+
+        $customer = Customer::where('email', $request->email)->first();
+
+        if (!$customer) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Email not found.'
+            ], 404);
+        }
+
+        CustomerOtp::where('customer_id', $customer->id)
+            ->where('type', 'password_reset')
+            ->whereNull('verified_at')
+            ->delete();
+
+        $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+
+        CustomerOtp::create([
+            'customer_id'  => $customer->id,
+            'email'        => $customer->email,
+            'phone_number' => $customer->phone_number,
+            'code'         => $code,
+            'type'         => 'password_reset',
+            'expires_at'   => now()->addMinutes(5),
+            'verified_at'  => null,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Password reset OTP sent successfully.',
+            'demo_otp' => $code,
+        ]);
+    }
+
+    public function verifyResetPasswordOtp(Request $request)
+    {
+        $request->validate([
+            'email' => 'required|email|exists:customers,email',
+            'code'  => 'required|string|size:6',
+        ]);
+
+        $customer = Customer::where('email', $request->email)->first();
+
+        if (!$customer) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Customer not found.'
+            ], 404);
+        }
+
+        $otp = CustomerOtp::where('customer_id', $customer->id)
+            ->where('type', 'password_reset')
+            ->where('code', $request->code)
+            ->whereNull('verified_at')
+            ->where('expires_at', '>', now())
+            ->latest()
+            ->first();
+
+        if (!$otp) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid or expired OTP.'
+            ], 422);
+        }
+
+        $otp->update([
+            'verified_at' => now(),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'OTP verified successfully.'
+        ]);
+    }
+
+    public function resetPassword(Request $request)
+    {
+        $request->validate([
+            'email' => 'required|email|exists:customers,email',
+            'password' => 'required|string|min:4|confirmed',
+        ]);
+
+        $customer = Customer::where('email', $request->email)->first();
+
+        if (!$customer) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Customer not found.'
+            ], 404);
+        }
+
+        $verifiedOtp = CustomerOtp::where('customer_id', $customer->id)
+            ->where('type', 'password_reset')
+            ->whereNotNull('verified_at')
+            ->latest()
+            ->first();
+
+        if (!$verifiedOtp) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Please verify OTP first.'
+            ], 403);
+        }
+
+        $customer->update([
+            'password' => Hash::make($request->password),
+        ]);
+
+        CustomerOtp::where('customer_id', $customer->id)
+            ->where('type', 'password_reset')
+            ->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Password reset successful.'
+        ]);
+    }
 }
