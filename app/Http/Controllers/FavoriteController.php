@@ -28,7 +28,8 @@ class FavoriteController extends Controller
                 'p.is_available',
                 'p.discount_active',
                 'p.discount_percent',
-                'c.name as category_name'
+                'c.name as category_name',
+                'c.is_active as category_is_active'
             )
             ->where('f.customer_id', $customer->id)
             ->orderBy('f.id', 'asc')
@@ -48,11 +49,13 @@ class FavoriteController extends Controller
             'product_id' => 'required|integer|exists:products,id',
         ]);
 
-        $product = DB::table('products')
-            ->where('id', $request->product_id)
+        $product = DB::table('products as p')
+            ->join('categories as c', 'c.id', '=', 'p.category_id')
+            ->select('p.id', 'p.is_active', 'p.is_available', 'c.is_active as category_is_active')
+            ->where('p.id', $request->product_id)
             ->first();
 
-        if (!$product || (int) $product->is_active !== 1) {
+        if (!$product || !$product->is_active || !$product->category_is_active) {
             return response()->json([
                 'success' => false,
                 'message' => 'Product not found or unavailable.',

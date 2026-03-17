@@ -27,7 +27,7 @@ class CartController extends Controller
 
         $items = DB::table('cart_items as ci')
             ->join('products as p', 'p.id', '=', 'ci.product_id')
-            ->leftJoin('categories as c', 'c.id', '=', 'p.category_id')
+            ->join('categories as c', 'c.id', '=', 'p.category_id')
             ->select(
                 'ci.id as cart_item_id',
                 'ci.cart_id',
@@ -45,14 +45,31 @@ class CartController extends Controller
                 'p.is_available',
                 'p.discount_active',
                 'p.discount_percent',
-                'c.name as category_name'
+                'c.name as category_name',
+                'c.is_active as category_is_active'
             )
             ->where('ci.cart_id', $cart->id)
             ->orderBy('ci.id', 'asc')
             ->get()
             ->map(function ($item) {
-                $price = (float) $item->price;
+                $basePrice = (float) $item->price;
                 $qty = (int) $item->quantity;
+                $discountActive = (bool) $item->discount_active;
+                $discountPercent = $item->discount_percent !== null ? (float) $item->discount_percent : null;
+
+                $finalPrice = $basePrice;
+
+                if ($discountActive && $discountPercent !== null && $discountPercent > 0) {
+                    $finalPrice = round($basePrice * (1 - ($discountPercent / 100)), 2);
+                }
+
+                $warning = null;
+
+                if (!$item->is_active || !$item->category_is_active) {
+                    $warning = 'This item is no longer available. Please remove it before checkout.';
+                } elseif (!$item->is_available) {
+                    $warning = 'This item is out of stock. Please remove it before checkout.';
+                }
 
                 return [
                     'cart_item_id' => $item->cart_item_id,
@@ -62,20 +79,17 @@ class CartController extends Controller
                     'category_id' => $item->category_id,
                     'category_name' => $item->category_name,
                     'name' => $item->name,
-                    'price' => $item->price,
+                    'price' => $basePrice,
+                    'final_price' => $finalPrice,
                     'unit_label' => $item->unit_label,
                     'image_url' => $item->image_url,
                     'description' => $item->description,
-                    'is_active' => (int) $item->is_active,
-                    'is_available' => (int) $item->is_available,
-                    'discount_active' => (int) $item->discount_active,
+                    'is_active' => (bool) $item->is_active,
+                    'is_available' => (bool) $item->is_available,
+                    'discount_active' => (bool) $item->discount_active,
                     'discount_percent' => $item->discount_percent,
-                    'subtotal' => round($price * $qty, 2),
-                    'warning' => ((int) $item->is_active !== 1)
-                        ? 'This item is no longer available. Please remove it before checkout.'
-                        : (((int) $item->is_available !== 1)
-                            ? 'This item is out of stock. Please remove it before checkout.'
-                            : null),
+                    'subtotal' => round($finalPrice * $qty, 2),
+                    'warning' => $warning,
                 ];
             });
 
@@ -99,18 +113,25 @@ class CartController extends Controller
 
         $quantity = (int) ($request->quantity ?? 1);
 
-        $product = DB::table('products')
-            ->where('id', $request->product_id)
+        $product = DB::table('products as p')
+            ->join('categories as c', 'c.id', '=', 'p.category_id')
+            ->select(
+                'p.id',
+                'p.is_active',
+                'p.is_available',
+                'c.is_active as category_is_active'
+            )
+            ->where('p.id', $request->product_id)
             ->first();
 
-        if (!$product || (int) $product->is_active !== 1) {
+        if (!$product || !$product->is_active || !$product->category_is_active) {
             return response()->json([
                 'success' => false,
                 'message' => 'Product not found or inactive.',
             ], 404);
         }
 
-        if ((int) $product->is_available !== 1) {
+        if (!$product->is_available) {
             return response()->json([
                 'success' => false,
                 'message' => 'This product is currently out of stock.',
@@ -175,13 +196,15 @@ class CartController extends Controller
         $cartItem = DB::table('cart_items as ci')
             ->join('carts as c', 'c.id', '=', 'ci.cart_id')
             ->join('products as p', 'p.id', '=', 'ci.product_id')
+            ->join('categories as cat', 'cat.id', '=', 'p.category_id')
             ->select(
                 'ci.id',
                 'ci.cart_id',
                 'ci.product_id',
                 'c.customer_id',
                 'p.is_active',
-                'p.is_available'
+                'p.is_available',
+                'cat.is_active as category_is_active'
             )
             ->where('ci.id', $id)
             ->where('c.customer_id', $customer->id)
@@ -194,14 +217,14 @@ class CartController extends Controller
             ], 404);
         }
 
-        if ((int) $cartItem->is_active !== 1) {
+        if (!$cartItem->is_active || !$cartItem->category_is_active) {
             return response()->json([
                 'success' => false,
                 'message' => 'This item is no longer available.',
             ], 422);
         }
 
-        if ((int) $cartItem->is_available !== 1) {
+        if (!$cartItem->is_available) {
             return response()->json([
                 'success' => false,
                 'message' => 'This item is currently out of stock.',

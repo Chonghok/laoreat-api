@@ -6,6 +6,8 @@ use App\Models\Customer;
 use App\Models\CustomerOtp;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rule;
+use CloudinaryLabs\CloudinaryLaravel\Facades\Cloudinary;
 
 class CustomerAuthController extends Controller
 {
@@ -434,4 +436,222 @@ class CustomerAuthController extends Controller
             'message' => 'Password reset successful.'
         ]);
     }
+
+    public function updateProfile(Request $request)
+    {
+        $customer = $request->user();
+
+        $request->validate([
+            'username' => ['required', 'string', 'max:100'],
+            'email' => [
+                'required',
+                'email',
+                'max:255',
+                Rule::unique('customers', 'email')->ignore($customer->id),
+            ],
+        ]);
+
+        $customer->update([
+            'username' => $request->username,
+            'email' => $request->email,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Profile updated successfully.',
+            'customer' => [
+                'id' => $customer->id,
+                'username' => $customer->fresh()->username,
+                'email' => $customer->fresh()->email,
+                'phone_number' => $customer->fresh()->phone_number,
+                'phone_verified_at' => $customer->fresh()->phone_verified_at,
+                'profile_url' => $customer->fresh()->profile_url ?: env('DEFAULT_PROFILE_URL'),
+            ],
+        ]);
+    }
+
+    public function sendProfilePhoneChangeOtp(Request $request)
+    {
+        $customer = $request->user();
+
+        $request->validate([
+            'phone_number' => ['required', 'string', 'max:30'],
+        ]);
+
+        $formattedPhone = $this->formatKhPhoneNumber($request->phone_number);
+
+        if ($formattedPhone !== $customer->phone_number) {
+            $exists = Customer::where('phone_number', $formattedPhone)
+                ->where('id', '!=', $customer->id)
+                ->exists();
+
+            if ($exists) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This phone number is already registered.'
+                ], 422);
+            }
+        }
+
+        CustomerOtp::where('customer_id', $customer->id)
+            ->where('type', 'phone_change')
+            ->whereNull('verified_at')
+            ->delete();
+
+        $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+
+        CustomerOtp::create([
+            'customer_id'  => $customer->id,
+            'email'        => $customer->email,
+            'phone_number' => $formattedPhone,
+            'code'         => $code,
+            'type'         => 'phone_change',
+            'expires_at'   => now()->addMinutes(5),
+            'verified_at'  => null,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Phone change OTP sent successfully.',
+            'demo_otp' => $code,
+        ]);
+    }
+
+    public function verifyProfilePhoneChangeOtp(Request $request)
+    {
+        $customer = $request->user();
+
+        $request->validate([
+            'code' => ['required', 'string', 'size:6'],
+        ]);
+
+        $otp = CustomerOtp::where('customer_id', $customer->id)
+            ->where('type', 'phone_change')
+            ->where('code', $request->code)
+            ->whereNull('verified_at')
+            ->where('expires_at', '>', now())
+            ->latest()
+            ->first();
+
+        if (!$otp) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid or expired OTP.'
+            ], 422);
+        }
+
+        $phoneAlreadyUsed = Customer::where('phone_number', $otp->phone_number)
+            ->where('id', '!=', $customer->id)
+            ->exists();
+
+        if ($phoneAlreadyUsed) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This phone number is already registered.'
+            ], 422);
+        }
+
+        $otp->update([
+            'verified_at' => now(),
+        ]);
+
+        $customer->update([
+            'phone_number' => $otp->phone_number,
+            'phone_verified_at' => now(),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Phone number updated successfully.',
+            'customer' => [
+                'id' => $customer->id,
+                'phone_number' => $customer->fresh()->phone_number,
+                'phone_verified_at' => $customer->fresh()->phone_verified_at,
+            ],
+        ]);
+    }
+
+    public function changePassword(Request $request)
+    {
+        $customer = $request->user();
+
+        $request->validate([
+            'current_password' => ['required', 'string'],
+            'password' => ['required', 'string', 'min:4', 'confirmed'],
+        ]);
+
+        if (!Hash::check($request->current_password, $customer->password)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Current password is incorrect.'
+            ], 422);
+        }
+
+        $customer->update([
+            'password' => Hash::make($request->password),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Password updated successfully.'
+        ]);
+    }
+
+    public function updateProfilePhoto(Request $request)
+{
+    $customer = $request->user();
+
+    $request->validate([
+        'profile' => ['required', 'image', 'max:2048'],
+    ]);
+
+    // delete old custom image first
+    if (!empty($customer->profile_public_id)) {
+        Cloudinary::uploadApi()->destroy($customer->profile_public_id);
+    }
+
+    $upload = Cloudinary::uploadApi()->upload(
+        $request->file('profile')->getRealPath(),
+        ['folder' => 'laoreat/customers']
+    );
+
+    $customer->update([
+        'profile_url' => $upload['secure_url'] ?? null,
+        'profile_public_id' => $upload['public_id'] ?? null,
+    ]);
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Profile photo updated successfully.',
+        'customer' => [
+            'id' => $customer->id,
+            'profile_url' => $customer->fresh()->profile_url ?: env('DEFAULT_PROFILE_URL'),
+            'profile_public_id' => $customer->fresh()->profile_public_id,
+        ],
+    ]);
+}
+
+public function removeProfilePhoto(Request $request)
+{
+    $customer = $request->user();
+
+    if (!empty($customer->profile_public_id)) {
+        Cloudinary::uploadApi()->destroy($customer->profile_public_id);
+    }
+
+    $customer->update([
+        'profile_url' => null,
+        'profile_public_id' => null,
+    ]);
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Profile photo removed successfully.',
+        'customer' => [
+            'id' => $customer->id,
+            'profile_url' => $customer->fresh()->profile_url ?: env('DEFAULT_PROFILE_URL'),
+            'profile_public_id' => null,
+        ],
+    ]);
+}
 }

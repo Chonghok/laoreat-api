@@ -39,28 +39,26 @@ class ProductController extends Controller
         }
 
         $request->validate([
-            'category_id' => 'required|integer',
+            'category_id' => 'required|integer|exists:categories,id',
             'name' => 'required|string|max:255',
             'price' => 'required|numeric|min:0',
             'unit_label' => 'required|string|max:100',
             'description' => 'required|string',
-            'discount_active' => 'required|in:0,1',
+            'discount_active' => 'required|boolean',
             'discount_percent' => 'nullable|numeric|min:0|max:100',
             'image' => 'required|image|max:4096',
         ]);
 
-        $discountActive = (int)$request->discount_active;
-        $discountPercent = $discountActive ? (float)$request->discount_percent : null;
+        $discountActive = filter_var($request->discount_active, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? false;
+        $discountPercent = $discountActive ? (float) $request->discount_percent : null;
 
-        // enforce percent when active
-        if ($discountActive === 1 && ($discountPercent === null || $discountPercent <= 0)) {
+        if ($discountActive && ($discountPercent === null || $discountPercent <= 0)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Discount percent is required when discount is active.'
             ], 422);
         }
 
-        // upload to cloudinary
         $upload = Cloudinary::uploadApi()->upload(
             $request->file('image')->getRealPath(),
             ['folder' => 'laoreat/products']
@@ -70,15 +68,15 @@ class ProductController extends Controller
         $publicId = $upload['public_id'] ?? null;
 
         $id = DB::table('products')->insertGetId([
-            'category_id' => (int)$request->category_id,
+            'category_id' => (int) $request->category_id,
             'name' => $request->name,
             'price' => $request->price,
             'unit_label' => $request->unit_label,
             'image_url' => $imageUrl,
             'image_public_id' => $publicId,
             'description' => $request->description,
-            'is_available' => 1,
-            'is_active' => 1,
+            'is_available' => true,
+            'is_active' => true,
             'discount_active' => $discountActive,
             'discount_percent' => $discountPercent,
             'created_at' => now(),
@@ -111,6 +109,7 @@ class ProductController extends Controller
         }
 
         $product = DB::table('products')->where('id', $id)->first();
+
         if (!$product) {
             return response()->json([
                 'success' => false,
@@ -119,21 +118,21 @@ class ProductController extends Controller
         }
 
         $request->validate([
-            'category_id' => 'required|integer',
+            'category_id' => 'required|integer|exists:categories,id',
             'name' => 'required|string|max:255',
             'price' => 'required|numeric|min:0',
             'unit_label' => 'required|string|max:100',
             'description' => 'required|string',
-            'discount_active' => 'required|in:0,1',
+            'discount_active' => 'required|boolean',
             'discount_percent' => 'nullable|numeric|min:0|max:100',
             'image' => 'nullable|image|max:4096',
         ]);
 
-        $discountActive = (int)$request->discount_active;
+        $discountActive = filter_var($request->discount_active, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? false;
         $hasPct = $request->filled('discount_percent');
-        $discountPercent = $hasPct ? (float)$request->discount_percent : null;
+        $discountPercent = $hasPct ? (float) $request->discount_percent : null;
 
-        if ($discountActive === 1 && (!$hasPct || $discountPercent <= 0)) {
+        if ($discountActive && (!$hasPct || $discountPercent <= 0)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Discount percent is required when discount is active.'
@@ -141,23 +140,23 @@ class ProductController extends Controller
         }
 
         $update = [
-            'category_id' => (int)$request->category_id,
+            'category_id' => (int) $request->category_id,
             'name' => $request->name,
             'price' => $request->price,
             'unit_label' => $request->unit_label,
             'description' => $request->description,
             'discount_active' => $discountActive,
+            'discount_percent' => $discountActive ? $discountPercent : null,
             'updated_at' => now(),
         ];
 
-        if ($hasPct) {
-            $update['discount_percent'] = $discountPercent;
-        }
-
-        // image replace (optional)
         if ($request->hasFile('image')) {
             if (!empty($product->image_public_id)) {
-                Cloudinary::uploadApi()->destroy($product->image_public_id);
+                try {
+                    Cloudinary::uploadApi()->destroy($product->image_public_id);
+                } catch (\Throwable $e) {
+                    // ignore old image delete failure
+                }
             }
 
             $upload = Cloudinary::uploadApi()->upload(
@@ -171,9 +170,32 @@ class ProductController extends Controller
 
         DB::table('products')->where('id', $id)->update($update);
 
+        $updatedProduct = DB::table('products as p')
+            ->leftJoin('categories as c', 'c.id', '=', 'p.category_id')
+            ->select(
+                'p.id',
+                'p.category_id',
+                'p.name',
+                'p.price',
+                'p.unit_label',
+                'p.image_url',
+                'p.image_public_id',
+                'p.description',
+                'p.is_available',
+                'p.is_active',
+                'p.discount_active',
+                'p.discount_percent',
+                'c.name as category_name',
+                'p.created_at',
+                'p.updated_at'
+            )
+            ->where('p.id', $id)
+            ->first();
+
         return response()->json([
             'success' => true,
-            'message' => 'Product updated'
+            'message' => 'Product updated',
+            'data' => $updatedProduct
         ]);
     }
 
@@ -190,34 +212,46 @@ class ProductController extends Controller
         }
 
         $product = DB::table('products')->where('id', $id)->first();
+
         if (!$product) {
-            return response()->json(['success' => false, 'message' => 'Product not found'], 404);
+            return response()->json([
+                'success' => false,
+                'message' => 'Product not found'
+            ], 404);
         }
 
-        $request->validate(['is_active' => 'required|in:0,1']);
+        $request->validate([
+            'is_active' => 'required|boolean'
+        ]);
 
         DB::table('products')->where('id', $id)->update([
-            'is_active' => (int)$request->is_active,
+            'is_active' => filter_var($request->is_active, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? false,
             'updated_at' => now(),
         ]);
 
         return response()->json([
             'success' => true,
-            'message' => ((int)$request->is_active === 1) ? 'Product enabled' : 'Product disabled'
+            'message' => ((bool) $request->is_active === true) ? 'Product enabled' : 'Product disabled'
         ]);
     }
 
     public function setAvailability(Request $request, $id)
     {
         $product = DB::table('products')->where('id', $id)->first();
+
         if (!$product) {
-            return response()->json(['success' => false, 'message' => 'Product not found'], 404);
+            return response()->json([
+                'success' => false,
+                'message' => 'Product not found'
+            ], 404);
         }
 
-        $request->validate(['is_available' => 'required|in:0,1']);
+        $request->validate([
+            'is_available' => 'required|boolean'
+        ]);
 
         DB::table('products')->where('id', $id)->update([
-            'is_available' => (int)$request->is_available,
+            'is_available' => filter_var($request->is_available, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? false,
             'updated_at' => now(),
         ]);
 
@@ -230,7 +264,7 @@ class ProductController extends Controller
     public function appIndex(Request $request)
     {
         $query = DB::table('products as p')
-            ->leftJoin('categories as c', 'c.id', '=', 'p.category_id')
+            ->join('categories as c', 'c.id', '=', 'p.category_id')
             ->select(
                 'p.id',
                 'p.category_id',
@@ -244,7 +278,8 @@ class ProductController extends Controller
                 'p.discount_percent',
                 'c.name as category_name'
             )
-            ->where('p.is_active', 1);
+            ->where('p.is_active', true)
+            ->where('c.is_active', true);
 
         if ($request->filled('category_id')) {
             $query->where('p.category_id', (int) $request->category_id);
@@ -268,7 +303,7 @@ class ProductController extends Controller
     public function show($id)
     {
         $product = DB::table('products as p')
-            ->leftJoin('categories as c', 'c.id', '=', 'p.category_id')
+            ->join('categories as c', 'c.id', '=', 'p.category_id')
             ->select(
                 'p.id',
                 'p.category_id',
@@ -284,7 +319,8 @@ class ProductController extends Controller
                 'c.name as category_name'
             )
             ->where('p.id', $id)
-            ->where('p.is_active', 1)
+            ->where('p.is_active', true)
+            ->where('c.is_active', true)
             ->first();
 
         if (!$product) {
@@ -297,7 +333,7 @@ class ProductController extends Controller
         $reviewSummary = DB::table('product_reviews')
             ->selectRaw('COUNT(*) as review_count, COALESCE(AVG(rating), 0) as average_rating')
             ->where('product_id', $id)
-            ->where('is_visible', 1)
+            ->where('is_visible', true)
             ->first();
 
         return response()->json([
@@ -324,7 +360,7 @@ class ProductController extends Controller
     public function deals()
     {
         $products = DB::table('products as p')
-            ->leftJoin('categories as c', 'c.id', '=', 'p.category_id')
+            ->join('categories as c', 'c.id', '=', 'p.category_id')
             ->select(
                 'p.id',
                 'p.category_id',
@@ -338,8 +374,9 @@ class ProductController extends Controller
                 'p.discount_percent',
                 'c.name as category_name'
             )
-            ->where('p.is_active', 1)
-            ->where('p.discount_active', 1)
+            ->where('p.is_active', true)
+            ->where('c.is_active', true)
+            ->where('p.discount_active', true)
             ->whereNotNull('p.discount_percent')
             ->where('p.discount_percent', '>', 0)
             ->orderByDesc('p.discount_percent')
@@ -352,12 +389,14 @@ class ProductController extends Controller
         ]);
     }
 
-    public function popular()
+    public function popular(Request $request)
     {
+        $limit = (int) $request->get('limit', 10);
+
         $products = DB::table('products as p')
+            ->join('categories as c', 'c.id', '=', 'p.category_id')
             ->join('order_items as oi', 'oi.product_id', '=', 'p.id')
             ->join('orders as o', 'o.id', '=', 'oi.order_id')
-            ->leftJoin('categories as c', 'c.id', '=', 'p.category_id')
             ->select(
                 'p.id',
                 'p.category_id',
@@ -370,10 +409,11 @@ class ProductController extends Controller
                 'p.discount_active',
                 'p.discount_percent',
                 'c.name as category_name',
-                DB::raw('COALESCE(SUM(oi.quantity), 0) as total_sold')
+                DB::raw('SUM(oi.quantity) as total_sold')
             )
-            ->where('p.is_active', 1)
-            ->whereIn('o.status', ['completed', 'delivered'])
+            ->where('p.is_active', true)
+            ->where('c.is_active', true)
+            ->whereIn('o.status', ['delivered', 'picked_up'])
             ->groupBy(
                 'p.id',
                 'p.category_id',
@@ -388,8 +428,8 @@ class ProductController extends Controller
                 'c.name'
             )
             ->orderByDesc('total_sold')
-            ->orderBy('p.id', 'desc')
-            ->limit(10)
+            ->orderByDesc('p.id')
+            ->limit($limit)
             ->get();
 
         return response()->json([

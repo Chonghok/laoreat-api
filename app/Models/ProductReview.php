@@ -14,6 +14,11 @@ class ProductReview extends Model
         'is_visible',
     ];
 
+    protected $casts = [
+        'is_visible' => 'boolean',
+        'rating' => 'integer',
+    ];
+
     public function product()
     {
         return $this->belongsTo(Product::class);

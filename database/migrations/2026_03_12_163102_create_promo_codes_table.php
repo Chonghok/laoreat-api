@@ -21,6 +21,7 @@ return new class extends Migration
             $table->integer('max_usage_per_customer')->nullable();
             $table->integer('max_total_usage')->nullable();
             $table->integer('used_count')->default(0);
+            $table->string('description', 255);
             $table->timestamp('expires_at')->nullable();
             $table->boolean('is_active')->default(true);
             $table->timestamps();

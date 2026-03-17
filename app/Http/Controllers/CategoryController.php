@@ -10,7 +10,8 @@ use CloudinaryLabs\CloudinaryLaravel\Facades\Cloudinary;
 
 class CategoryController extends Controller
 {
-    public function index() {
+    public function index()
+    {
         $cats = DB::table('categories')
             ->select('id', 'name', 'image_url', 'image_public_id', 'sort_order', 'is_active', 'created_at', 'updated_at')
             ->orderBy('sort_order')
@@ -53,8 +54,8 @@ class CategoryController extends Controller
             'name' => $request->name,
             'image_url' => $imageUrl,
             'image_public_id' => $publicId,
-            'sort_order' => (int)$request->sort_order,
-            'is_active' => 1,
+            'sort_order' => (int) $request->sort_order,
+            'is_active' => true,
             'created_at' => now(),
             'updated_at' => now(),
         ]);
@@ -114,7 +115,7 @@ class CategoryController extends Controller
 
         $update = [
             'name' => $request->name,
-            'sort_order' => (int)$request->sort_order,
+            'sort_order' => (int) $request->sort_order,
             'updated_at' => now(),
         ];
 
@@ -181,17 +182,17 @@ class CategoryController extends Controller
         }
 
         $request->validate([
-            'is_active' => 'required|in:0,1',
+            'is_active' => 'required|boolean',
         ]);
 
         DB::table('categories')->where('id', $id)->update([
-            'is_active' => (int)$request->is_active,
+            'is_active' => filter_var($request->is_active, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? false,
             'updated_at' => now(),
         ]);
 
         return response()->json([
             'success' => true,
-            'message' => ((int)$request->is_active === 1)
+            'message' => ((bool) $request->is_active === true)
                 ? 'Category enabled successfully.'
                 : 'Category disabled successfully.'
         ]);
@@ -201,11 +202,11 @@ class CategoryController extends Controller
     {
         $categories = Category::query()
             ->select('id', 'name', 'image_url', 'sort_order')
-            ->where('is_active', 1)
+            ->where('is_active', true)
             ->orderBy('sort_order')
             ->orderBy('id')
             ->get();
-        
+
         return response()->json([
             'success' => true,
             'data' => $categories,

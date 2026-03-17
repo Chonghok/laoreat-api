@@ -35,4 +35,10 @@ return [
         ],
     ],
 
+    'stripe' => [
+        'secret' => env('STRIPE_SECRET'),
+        'publishable_key' => env('STRIPE_PUBLISHABLE_KEY'),
+        'currency' => env('STRIPE_CURRENCY', 'usd'),
+    ],
+
 ];
