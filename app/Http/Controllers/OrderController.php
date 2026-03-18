@@ -35,9 +35,7 @@ class OrderController extends Controller
         $intent = $stripe->paymentIntents->create([
             'amount' => (int) round($checkout['total_amount'] * 100),
             'currency' => config('services.stripe.currency', 'usd'),
-            'automatic_payment_methods' => [
-                'enabled' => true,
-            ],
+            'payment_method_types' => ['card'],
             'metadata' => [
                 'customer_id' => (string) $customer->id,
                 'delivery_type_id' => (string) $validated['delivery_type_id'],
