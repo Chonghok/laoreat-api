@@ -47,7 +47,7 @@ class ProductReviewController extends Controller
         $reviews = ProductReview::with([
                 'customer:id,username,email,profile_url'
             ])
-            ->select('id', 'product_id', 'customer_id', 'rating', 'comment', 'is_visible', 'created_at')
+            ->select('id', 'product_id', 'customer_id', 'rating', 'comment', 'is_visible', 'created_at', 'updated_at')
             ->where('product_id', $productId)
             ->latest()
             ->get();
