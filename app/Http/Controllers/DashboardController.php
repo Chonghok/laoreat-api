@@ -12,8 +12,8 @@ class DashboardController extends Controller
     {
         $tz = 'Asia/Phnom_Penh';
         $now = Carbon::now($tz);
-        $todayStart = $now->copy()->startOfDay()->timezone('UTC');
-        $todayEnd = $now->copy()->endOfDay()->timezone('UTC');
+        $todayStart = $now->copy()->startOfDay();
+        $todayEnd = $now->copy()->endOfDay();
         $sevenDaysStart = $now->copy()->subDays(6)->startOfDay();
 
         $summary = [
@@ -97,16 +97,16 @@ class DashboardController extends Controller
         $last7Days = collect();
         for ($i = 0; $i < 7; $i++) {
             $day = $sevenDaysStart->copy()->addDays($i);
-            $utcStart = $day->copy()->startOfDay()->timezone('UTC');
-            $utcEnd = $day->copy()->endOfDay()->timezone('UTC');
+            $start = $day->copy()->startOfDay();
+            $end = $day->copy()->endOfDay();
 
             $ordersCount = DB::table('orders')
-                ->whereBetween('created_at', [$utcStart, $utcEnd])
+                ->whereBetween('created_at', [$start, $end])
                 ->count();
 
             $paidRevenue = DB::table('payments')
                 ->where('status', 'paid')
-                ->whereBetween('paid_at', [$utcStart, $utcEnd])
+                ->whereBetween('paid_at', [$start, $end])
                 ->sum('amount');
 
             $last7Days->push([
