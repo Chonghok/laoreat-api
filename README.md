@@ -21,5 +21,5 @@ The Laravel backend API for Laoreat, a university group project involving a mobi
 
 ## Demo
 - **Admin Dashboard:** https://laoreatdashboard.netlify.app/
-Email: laoreatadmin@gmail.com
-Pass: 1234
+- Email: laoreatadmin@gmail.com
+- Pass: 1234
